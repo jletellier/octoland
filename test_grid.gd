@@ -19,29 +19,30 @@ const INPUT_ACTIONS := [
 ]
 
 const TILE_PATH := Vector2i(2, 0)
-const TILE_PLAYER := Vector2i(3, 0)
-const TILE_PLAYER_GATE := Vector2i(8, 0)
+const TILE_ETHER := Vector2i(3, 0)
+const TILE_PLAYER := Vector2i(5, 0)
+const TILE_OBJECTS := Vector2i(0, 7)
 const TILE_GOAL := Vector2i(4, 0)
 const TILE_GOAL_REACHED := Vector2i(5, 0)
-const TILE_GATE := Vector2i(6, 0)
 const TILE_OCTALS := Vector2i(0, 1)
-const TILE_INPUTS := Vector2i(0, 5)
-const TILE_OUTPUTS := Vector2i(0, 7)
+const TILE_EMITTERS := Vector2i(0, 5)
 
 var _last_input_action := ""
 var _last_input_delta := 0.0
 var _is_first_echo := true
 var _step_delta := 0.0
 var _player_pos := Vector2i.ZERO
-var _player_previous_tile := TILE_PATH
+var _player_tile := TILE_PLAYER
 
 @onready var _particle_layer := $"ParticleLayer" as TileMapLayer
 
 
 func _ready() -> void:
-	var player_cells := _particle_layer.get_used_cells_by_id(0, TILE_PLAYER)
+	var player_cells := _particle_layer.get_used_cells_by_id(0, _player_tile)
 	if player_cells.size() > 0:
+		_player_tile = TILE_OBJECTS + Vector2i(2, 0)
 		_player_pos = player_cells[0]
+		_particle_layer.set_cell(_player_pos, 0, _player_tile)
 
 
 func _process(delta: float) -> void:
@@ -105,28 +106,20 @@ func _action(dir: Vector2i) -> bool:
 	# TODO: Move these to the CA and only change the player tile (needs 4 player move directions)
 	
 	if current_tile == TILE_PATH or current_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
-		_particle_layer.set_cell(_player_pos, 0, _player_previous_tile)
-		_particle_layer.set_cell(new_pos, 0, TILE_PLAYER)
-		_player_previous_tile = TILE_PATH
-		_player_pos = new_pos
-		return true
-	
-	if current_tile == Vector2i(TILE_GATE.x + 1, TILE_GATE.y):
-		_particle_layer.set_cell(_player_pos, 0, _player_previous_tile)
-		_particle_layer.set_cell(new_pos, 0, TILE_PLAYER_GATE)
-		_player_previous_tile = Vector2i(TILE_GATE.x + 1, TILE_GATE.y)
+		_particle_layer.set_cell(_player_pos, 0, TILE_PATH)
+		_particle_layer.set_cell(new_pos, 0, _player_tile)
 		_player_pos = new_pos
 		return true
 	
 	if current_tile == TILE_GOAL:
-		_particle_layer.set_cell(_player_pos, 0, _player_previous_tile)
+		_particle_layer.set_cell(_player_pos, 0, TILE_PATH)
 		_particle_layer.set_cell(new_pos, 0, TILE_GOAL_REACHED)
 		_player_pos = new_pos
 		return true
 	
-	if current_tile.y in [TILE_INPUTS.y, TILE_INPUTS.y + 1]:
+	if current_tile.y in [TILE_EMITTERS.y, TILE_EMITTERS.y + 1]:
 		var new_tile := current_tile
-		new_tile.y = TILE_INPUTS.y + ((current_tile.y - TILE_INPUTS.y + 1) % 2)
+		new_tile.y = TILE_EMITTERS.y + ((current_tile.y - TILE_EMITTERS.y + 1) % 2)
 		_particle_layer.set_cell(new_pos, 0, new_tile)
 		return true
 	
@@ -144,7 +137,7 @@ func _tick() -> void:
 		var tile: Vector2i = cell_tiles[pos]
 		
 		var valid_neighbors = 0
-		var active_outputs = 0
+		var active_emitters = 0
 		var neighbor_value := -1
 		var neighbor_dir := -1
 		
@@ -164,14 +157,11 @@ func _tick() -> void:
 					neighbor_dir = neighbor_tile.y - TILE_OCTALS.y
 					valid_neighbors += 1
 			
-			if neighbor_tile.y == TILE_INPUTS.y + 1:
+			if neighbor_tile.y == TILE_EMITTERS.y + 1:
 				neighbor_value = neighbor_tile.x
 				neighbor_dir = target_dir
 				valid_neighbors += 1
-			
-			if neighbor_tile.y == TILE_OUTPUTS.y + 1:
-				neighbor_value = neighbor_tile.x
-				active_outputs += 1
+				active_emitters += 1
 		
 		if tile == TILE_PATH:
 			if valid_neighbors == 1:
@@ -179,13 +169,13 @@ func _tick() -> void:
 				_particle_layer.set_cell(pos, 0, new_tile)
 				continue
 		
-		if tile.y == TILE_OUTPUTS.y:
+		if tile.y == TILE_EMITTERS.y:
 			if valid_neighbors == 1 and tile.x == neighbor_value:
 				var new_tile := tile + Vector2i(0, 1)
 				_particle_layer.set_cell(pos, 0, new_tile)
 				continue
 		
-		if tile.y == TILE_OUTPUTS.y + 1:
+		if tile.y == TILE_EMITTERS.y + 1:
 			if valid_neighbors == 0 or tile.x != neighbor_value:
 				var new_tile := tile + Vector2i(0, -1)
 				_particle_layer.set_cell(pos, 0, new_tile)
@@ -194,16 +184,4 @@ func _tick() -> void:
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			if valid_neighbors == 0:
 				_particle_layer.set_cell(pos, 0, TILE_PATH)
-				continue
-		
-		if tile == TILE_GATE:
-			if active_outputs == 1:
-				var new_tile := TILE_GATE + Vector2i(1, 0)
-				_particle_layer.set_cell(pos, 0, new_tile)
-				continue
-		
-		if tile == Vector2i(TILE_GATE.x + 1, TILE_GATE.y):
-			if active_outputs == 0:
-				var new_tile := TILE_GATE
-				_particle_layer.set_cell(pos, 0, new_tile)
 				continue
