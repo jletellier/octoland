@@ -18,14 +18,20 @@ const INPUT_ACTIONS := [
 	"game_up",
 ]
 
-const TILE_PATH := Vector2i(2, 0)
-const TILE_ETHER := Vector2i(3, 0)
-const TILE_PLAYER := Vector2i(5, 0)
-const TILE_OBJECTS := Vector2i(0, 7)
-const TILE_GOAL := Vector2i(4, 0)
-const TILE_GOAL_REACHED := Vector2i(5, 0)
+const TILE_EMPTY := Vector2i.ZERO
+const TILE_PATH := Vector2i(1, 0)
+const TILE_CONDUCTOR := Vector2i(2, 0)
+const TILE_LIQUID := Vector2i(3, 0)
+const TILE_LIQUID_POWERED := Vector2i(4, 0)
+const TILE_VOID := Vector2i(5, 0)
 const TILE_OCTALS := Vector2i(0, 1)
 const TILE_EMITTERS := Vector2i(0, 5)
+const TILE_OBJECTS := Vector2i(0, 7)
+
+# For prototyping only
+const TILE_PLAYER := Vector2i(13, 0)
+const TILE_GOAL := Vector2i(4, 0)
+const TILE_GOAL_REACHED := Vector2i(5, 0)
 
 var _last_input_action := ""
 var _last_input_delta := 0.0
@@ -40,7 +46,7 @@ var _player_tile := TILE_PLAYER
 func _ready() -> void:
 	var player_cells := _particle_layer.get_used_cells_by_id(0, _player_tile)
 	if player_cells.size() > 0:
-		_player_tile = TILE_OBJECTS + Vector2i(2, 0)
+		_player_tile = TILE_OBJECTS + Vector2i(1, 0)
 		_player_pos = player_cells[0]
 		_particle_layer.set_cell(_player_pos, 0, _player_tile)
 
@@ -100,27 +106,34 @@ func _process(delta: float) -> void:
 
 
 func _action(dir: Vector2i) -> bool:
-	var new_pos := _player_pos + dir
-	var current_tile := _particle_layer.get_cell_atlas_coords(new_pos)
+	var target_pos := _player_pos + dir
+	var current_tile := _particle_layer.get_cell_atlas_coords(_player_pos)
+	var target_tile := _particle_layer.get_cell_atlas_coords(target_pos)
 	
 	# TODO: Move these to the CA and only change the player tile (needs 4 player move directions)
 	
-	if current_tile == TILE_PATH or current_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
-		_particle_layer.set_cell(_player_pos, 0, TILE_PATH)
-		_particle_layer.set_cell(new_pos, 0, _player_tile)
-		_player_pos = new_pos
+	if target_tile in [TILE_PATH, TILE_CONDUCTOR, TILE_LIQUID, TILE_LIQUID_POWERED, TILE_VOID] \
+			or target_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+		_particle_layer.set_cell(_player_pos, 0, Vector2i(current_tile.x, 0))
+		
+		if target_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+			_particle_layer.set_cell(target_pos, 0, TILE_OBJECTS + Vector2i(TILE_CONDUCTOR.x, 0))
+		else:
+			_particle_layer.set_cell(target_pos, 0, TILE_OBJECTS + Vector2i(target_tile.x, 0))
+		
+		_player_pos = target_pos
 		return true
 	
-	if current_tile == TILE_GOAL:
+	if target_tile == TILE_GOAL:
 		_particle_layer.set_cell(_player_pos, 0, TILE_PATH)
-		_particle_layer.set_cell(new_pos, 0, TILE_GOAL_REACHED)
-		_player_pos = new_pos
+		_particle_layer.set_cell(target_pos, 0, TILE_GOAL_REACHED)
+		_player_pos = target_pos
 		return true
 	
-	if current_tile.y in [TILE_EMITTERS.y, TILE_EMITTERS.y + 1]:
-		var new_tile := current_tile
-		new_tile.y = TILE_EMITTERS.y + ((current_tile.y - TILE_EMITTERS.y + 1) % 2)
-		_particle_layer.set_cell(new_pos, 0, new_tile)
+	if target_tile.y in [TILE_EMITTERS.y, TILE_EMITTERS.y + 1]:
+		var new_tile := target_tile
+		new_tile.y = TILE_EMITTERS.y + ((target_tile.y - TILE_EMITTERS.y + 1) % 2)
+		_particle_layer.set_cell(target_pos, 0, new_tile)
 		return true
 	
 	return false
@@ -136,10 +149,10 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		var valid_neighbors = 0
-		var active_emitters = 0
-		var neighbor_value := -1
-		var neighbor_dir := -1
+		var neighbor_has_emitter = false
+		var neighbor_has_liquid = false
+		var neighbor_values: Array[int] = []
+		var neighbor_dirs: Array[int] = []
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -151,37 +164,44 @@ func _tick() -> void:
 			var target_dir := (neighbor_i + 2) % 4
 			
 			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+				if neighbor_tile.x == 2:
+					neighbor_has_liquid = true
+				
 				var current_dir := neighbor_tile.y - TILE_OCTALS.y
-				if current_dir == target_dir:
-					neighbor_value = neighbor_tile.x
-					neighbor_dir = neighbor_tile.y - TILE_OCTALS.y
-					valid_neighbors += 1
+				if current_dir != (target_dir + 2) % 4:
+					neighbor_values.append(neighbor_tile.x)
+					neighbor_dirs.append(target_dir)
 			
 			if neighbor_tile.y == TILE_EMITTERS.y + 1:
-				neighbor_value = neighbor_tile.x
-				neighbor_dir = target_dir
-				valid_neighbors += 1
-				active_emitters += 1
+				neighbor_values.append(neighbor_tile.x)
+				neighbor_dirs.append(target_dir)
+				neighbor_has_emitter = true
+			
+			if neighbor_tile == TILE_LIQUID:
+				neighbor_has_liquid = true
+		
+		var neighbor_combined_value := 0
+		for value in neighbor_values:
+			neighbor_combined_value |= value
+		
+		if neighbor_values.size() == 1:
+			if tile == TILE_CONDUCTOR:
+				var new_tile := TILE_OCTALS + Vector2i(neighbor_combined_value, neighbor_dirs[0])
+				_particle_layer.set_cell(pos, 0, new_tile)
+				continue
+			
+			if tile.y == TILE_EMITTERS.y:
+				if tile.x in neighbor_values:
+					var new_tile := tile + Vector2i(0, 1)
+					_particle_layer.set_cell(pos, 0, new_tile)
+					continue
 		
 		if tile == TILE_PATH:
-			if valid_neighbors == 1:
-				var new_tile := TILE_OCTALS + Vector2i(neighbor_value, neighbor_dir)
-				_particle_layer.set_cell(pos, 0, new_tile)
-				continue
-		
-		if tile.y == TILE_EMITTERS.y:
-			if valid_neighbors == 1 and tile.x == neighbor_value:
-				var new_tile := tile + Vector2i(0, 1)
-				_particle_layer.set_cell(pos, 0, new_tile)
-				continue
-		
-		if tile.y == TILE_EMITTERS.y + 1:
-			if valid_neighbors == 0 or tile.x != neighbor_value:
-				var new_tile := tile + Vector2i(0, -1)
-				_particle_layer.set_cell(pos, 0, new_tile)
+			if neighbor_has_liquid:
+				_particle_layer.set_cell(pos, 0, TILE_LIQUID)
 				continue
 		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
-			if valid_neighbors == 0:
-				_particle_layer.set_cell(pos, 0, TILE_PATH)
+			if neighbor_values.size() == 0 or neighbor_values.size() == 2:
+				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
 				continue
