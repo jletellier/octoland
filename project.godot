@@ -10,13 +10,13 @@ config_version=5
 
 [application]
 
-config/name="Nybble World"
+config/name="Octoland"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [display]
 
-window/stretch/scale=2.0
+window/stretch/scale=3.0
 
 [input]
 
