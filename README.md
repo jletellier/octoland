@@ -1,21 +1,12 @@
-# Nybble World
+# Octoland
 
-Solve logic puzzles by guiding nybbles through a custom cellular automaton.
-
-Each level gives you:
-
-- one or more input values (hex values 0-F)
-- a target output value
-- a grid where nybbles move automatically each tick
-- a limited number of ticks per “wave”
-
-You place wires to route the nybbles across the grid. When two nybbles collide, they combine into a new value based on the automaton’s rules (e.g., logical NOR). Use routing, timing, and collisions to produce the correct value before the wave ends.
+Solve logic puzzles by guiding octals through a custom cellular automaton. You place wires to route the octals across the grid. In the overworld you navigate a character to the next level.
 
 This game was developed as part of [Game Off 2025](https://itch.io/jam/game-off-2025), a game jam "challenging individuals and teams to build a game during the month of November". This year's theme was "WAVES".
 
 ## Play the Game
 
-The current prototype is available on [Itch.io](https://liberabyte.itch.io/nybble-world).
+The current prototype is available on [Itch.io](https://liberabyte.itch.io/octoland).
 
 ## Licensing
 
