@@ -24,10 +24,13 @@ const TILE_CONDUCTOR := Vector2i(0, 0)
 const TILE_BLOCKED := Vector2i(1, 0)
 const TILE_OCTALS := Vector2i(0, 1)
 const TILE_EMITTERS := Vector2i(0, 5)
-const TILE_MODIFIERS := Vector2i(0, 7)
+const TILE_REDIRECTIONS := Vector2i(0, 7)
+const TILE_REDIRECTIONS_ACTIVE := Vector2i(0, 8)
+const TILE_SPLITTERS := Vector2i(4, 7)
+const TILE_SPLITTERS_ACTIVE := Vector2i(0, 12)
 const TILE_MODIFIER_NOT := Vector2i(2, 0)
 const TILE_MODIFIER_SHIFT := Vector2i(3, 0)
-const TILE_OBJECTS := Vector2i(0, 12)
+const TILE_OBJECTS := Vector2i(0, 14)
 
 @export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
 @export var tick_limit := 50
@@ -159,20 +162,30 @@ func _tick() -> void:
 		
 		var current_value := -1
 		var current_dir := -1
-		var current_is_modifier := false
+		var current_is_octal := false
+		var current_is_redirection := false
+		var current_is_splitter := false
 		var neighbor_has_modifier_not := false
 		var neighbor_has_modifier_shift := false
 		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			current_value = tile.x
 			current_dir = tile.y - TILE_OCTALS.y
-		elif tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
+			current_is_octal = true
+		elif tile.y in range(TILE_REDIRECTIONS_ACTIVE.y, TILE_REDIRECTIONS_ACTIVE.y + 4):
 			current_value = tile.x
-			current_dir = tile.y - TILE_MODIFIERS.y - 1
-			current_is_modifier = true
-		elif tile.y == TILE_MODIFIERS.y:
-			current_dir = tile.x
-			current_is_modifier = true
+			current_dir = tile.y - TILE_REDIRECTIONS_ACTIVE.y
+			current_is_redirection = true
+		elif tile.y == TILE_REDIRECTIONS.y and tile.x in range(TILE_REDIRECTIONS.x, TILE_REDIRECTIONS.x + 4):
+			current_dir = tile.x - TILE_REDIRECTIONS.x
+			current_is_redirection = true
+		elif tile.y in range(TILE_SPLITTERS_ACTIVE.y, TILE_SPLITTERS_ACTIVE.y + 2):
+			current_value = tile.x
+			current_dir = tile.y - TILE_SPLITTERS_ACTIVE.y
+			current_is_splitter = true
+		elif tile.y == TILE_SPLITTERS.y and tile.x in range(TILE_SPLITTERS.x, TILE_SPLITTERS.x + 2):
+			current_dir = tile.x - TILE_SPLITTERS.x
+			current_is_splitter = true
 		
 		var new_value := -1
 		var new_dir := -1
@@ -196,25 +209,48 @@ func _tick() -> void:
 				neighbor_has_modifier_shift = true
 				continue
 			
-			# Modifiers output values into their direction
-			if current_is_modifier and current_dir == neighbor_i:
+			# Redirections output values into one direction
+			if current_is_redirection and neighbor_i == current_dir:
+				continue
+			
+			# Splitters output values into two directions
+			if current_is_splitter and neighbor_i in [current_dir, current_dir + 2]:
 				continue
 			
 			var neighbor_value := -1
 			var neighbor_dir := -1
+			var neighbor_is_octal := false
+			var neighbor_is_redirection := false
+			var neighbor_is_splitter := false
 			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 				neighbor_value = neighbor_tile.x
 				neighbor_dir = neighbor_tile.y - TILE_OCTALS.y
-			elif neighbor_tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
+				neighbor_is_octal = true
+			elif neighbor_tile.y in range(TILE_REDIRECTIONS_ACTIVE.y, TILE_REDIRECTIONS_ACTIVE.y + 4):
 				neighbor_value = neighbor_tile.x
-				neighbor_dir = neighbor_tile.y - TILE_MODIFIERS.y - 1
-			elif neighbor_tile.y == TILE_MODIFIERS.y:
-				neighbor_dir = neighbor_tile.x
+				neighbor_dir = neighbor_tile.y - TILE_REDIRECTIONS_ACTIVE.y
+				neighbor_is_redirection = true
+			elif neighbor_tile.y == TILE_REDIRECTIONS.y and neighbor_tile.x in range(TILE_REDIRECTIONS.x, TILE_REDIRECTIONS.x + 4):
+				neighbor_dir = neighbor_tile.x - TILE_REDIRECTIONS.x
+				neighbor_is_redirection = true
+			elif neighbor_tile.y in range(TILE_SPLITTERS_ACTIVE.y, TILE_SPLITTERS_ACTIVE.y + 2):
+				neighbor_value = neighbor_tile.x
+				neighbor_dir = neighbor_tile.y - TILE_SPLITTERS_ACTIVE.y
+				neighbor_is_splitter = true
+			elif neighbor_tile.y == TILE_SPLITTERS.y and neighbor_tile.x in range(TILE_SPLITTERS.x, TILE_SPLITTERS.x + 2):
+				neighbor_dir = neighbor_tile.x - TILE_SPLITTERS.x
+				neighbor_is_splitter = true
 			elif neighbor_tile.y == TILE_EMITTERS.y + 1:
 				neighbor_value = neighbor_tile.x
 			
-			# Values travel only one direction,
-			if neighbor_dir != -1 and neighbor_dir != (neighbor_i + 2) % 4:
+			# Values that travel only in one direction
+			if (neighbor_is_octal or neighbor_is_redirection) and \
+					(neighbor_i + 2) % 4 != neighbor_dir:
+				continue
+			
+			# Splitters travel in two directions
+			if neighbor_is_splitter and \
+					(neighbor_i + 2) % 4 not in [neighbor_dir, neighbor_dir + 2]:
 				continue
 			
 			# Valid neighbor spreads its value
@@ -239,18 +275,25 @@ func _tick() -> void:
 		
 		_tick_changes = true
 		
-		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or tile == TILE_CONDUCTOR:
+		if current_is_octal or tile == TILE_CONDUCTOR:
 			if new_value == -1:
 				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
 			else:
 				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_dir))
 			continue
 		
-		if tile.y == TILE_MODIFIERS.y or tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
+		if current_is_redirection:
 			if new_value == -1:
-				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(current_dir, 0))
+				_particle_layer.set_cell(pos, 0, TILE_REDIRECTIONS + Vector2i(current_dir, 0))
 			else:
-				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(new_value, tile.x + 1))
+				_particle_layer.set_cell(pos, 0, TILE_REDIRECTIONS_ACTIVE + Vector2i(new_value, tile.x - TILE_REDIRECTIONS.x))
+			continue
+		
+		if current_is_splitter:
+			if new_value == -1:
+				_particle_layer.set_cell(pos, 0, TILE_SPLITTERS + Vector2i(current_dir, 0))
+			else:
+				_particle_layer.set_cell(pos, 0, TILE_SPLITTERS_ACTIVE + Vector2i(new_value, tile.x - TILE_SPLITTERS.x))
 			continue
 
 
