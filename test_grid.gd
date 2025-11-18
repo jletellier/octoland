@@ -20,17 +20,17 @@ const INPUT_ACTIONS := [
 ]
 
 const TILE_EMPTY := Vector2i(-1, -1)
-const TILE_CONDUCTOR := Vector2i(0, 0)
-const TILE_BLOCKED := Vector2i(1, 0)
+const TILE_FREE := Vector2i(0, 0)
+const TILE_CONDUCTOR := Vector2i(1, 0)
 const TILE_OCTALS := Vector2i(0, 1)
 const TILE_EMITTERS := Vector2i(0, 5)
-const TILE_REDIRECTIONS := Vector2i(0, 7)
-const TILE_REDIRECTIONS_ACTIVE := Vector2i(0, 8)
-const TILE_SPLITTERS := Vector2i(4, 7)
-const TILE_SPLITTERS_ACTIVE := Vector2i(0, 12)
-const TILE_MODIFIER_NOT := Vector2i(2, 0)
-const TILE_MODIFIER_SHIFT := Vector2i(3, 0)
-const TILE_OBJECTS := Vector2i(0, 14)
+const TILE_TARGETS := Vector2i(0, 7)
+const TILE_REDIRECTIONS := Vector2i(2, 0)
+const TILE_REDIRECTIONS_ACTIVE := Vector2i(0, 10)
+const TILE_SPLITTERS := Vector2i(6, 0)
+const TILE_SPLITTERS_ACTIVE := Vector2i(0, 14)
+const TILE_MODIFIER_NOT := Vector2i(0, 9)
+const TILE_MODIFIER_SHIFT := Vector2i(1, 9)
 
 @export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
 @export var tick_limit := 50
@@ -156,7 +156,7 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		if tile in [TILE_BLOCKED, TILE_MODIFIER_NOT, TILE_MODIFIER_SHIFT] or \
+		if tile in [TILE_FREE, TILE_MODIFIER_NOT, TILE_MODIFIER_SHIFT] or \
 				tile.y in range(TILE_EMITTERS.y, TILE_EMITTERS.y + 1):
 			continue
 		
@@ -165,6 +165,7 @@ func _tick() -> void:
 		var current_is_octal := false
 		var current_is_redirection := false
 		var current_is_splitter := false
+		var current_is_target := false
 		var neighbor_has_modifier_not := false
 		var neighbor_has_modifier_shift := false
 		
@@ -186,6 +187,9 @@ func _tick() -> void:
 		elif tile.y == TILE_SPLITTERS.y and tile.x in range(TILE_SPLITTERS.x, TILE_SPLITTERS.x + 2):
 			current_dir = tile.x - TILE_SPLITTERS.x
 			current_is_splitter = true
+		elif tile.y == TILE_TARGETS.y:
+			current_value = tile.x
+			current_is_target = true
 		
 		var new_value := -1
 		var new_dir := -1
@@ -198,7 +202,7 @@ func _tick() -> void:
 			
 			var neighbor_tile: Vector2i = cell_tiles[neighbor_pos]
 			
-			if neighbor_tile in [TILE_BLOCKED]:
+			if neighbor_tile in [TILE_FREE]:
 				continue
 			
 			if neighbor_tile == TILE_MODIFIER_NOT:
@@ -269,6 +273,9 @@ func _tick() -> void:
 			
 			if neighbor_has_modifier_shift:
 				new_value = ((new_value << 1) | (new_value >> 2)) & 0b111
+			
+			if current_is_target and current_value == new_value:
+				print("TARGET reached!")
 		
 		if current_value == new_value:
 			continue
