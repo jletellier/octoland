@@ -31,6 +31,7 @@ const TILE_SPLITTERS := Vector2i(6, 0)
 const TILE_SPLITTERS_ACTIVE := Vector2i(0, 14)
 const TILE_MODIFIER_NOT := Vector2i(0, 9)
 const TILE_MODIFIER_SHIFT := Vector2i(1, 9)
+const TILE_MODIFIER_NOR := Vector2i(2, 9)
 
 @export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
 @export var tick_limit := 50
@@ -166,8 +167,10 @@ func _tick() -> void:
 		var current_is_redirection := false
 		var current_is_splitter := false
 		var current_is_target := false
+		var neighbor_has_multiple_values := false
 		var neighbor_has_modifier_not := false
 		var neighbor_has_modifier_shift := false
+		var neighbor_has_modifier_nor := false
 		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			current_value = tile.x
@@ -193,6 +196,7 @@ func _tick() -> void:
 		
 		var new_value := -1
 		var new_dir := -1
+		var new_nor_value := -1
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -211,6 +215,10 @@ func _tick() -> void:
 			
 			if neighbor_tile == TILE_MODIFIER_SHIFT:
 				neighbor_has_modifier_shift = true
+				continue
+			
+			if neighbor_tile == TILE_MODIFIER_NOR:
+				neighbor_has_modifier_nor = true
 				continue
 			
 			# Redirections output values into one direction
@@ -261,18 +269,25 @@ func _tick() -> void:
 			if neighbor_value != -1:
 				# Unless there is more than one valid neighbor
 				if new_value != -1:
-					new_value = -1
-					break
+					neighbor_has_multiple_values = true
+					new_nor_value = ~(new_value | neighbor_value) & 0b111
+					continue
 				
 				new_value = neighbor_value
 				new_dir = (neighbor_i + 2) % 4
 		
 		if new_value != -1:
+			if neighbor_has_modifier_nor:
+				new_value = new_nor_value
+			
 			if neighbor_has_modifier_not:
 				new_value = ~new_value & 0b111
 			
 			if neighbor_has_modifier_shift:
 				new_value = ((new_value << 1) | (new_value >> 2)) & 0b111
+			
+			if neighbor_has_multiple_values and !neighbor_has_modifier_nor:
+				new_value = -1
 			
 			if current_is_target and current_value == new_value:
 				print("TARGET reached!")
